@@ -1,44 +1,45 @@
 ;Credits BGA
-;Music by Frums.
-;Original BGA By Frums.
-;This program is a FANMADE BGA by DT9025A.
-;This program is a 16-bit ASM program.
+;Code by DT9025A
 
 assume cs:code,ds:data,ss:stack
 
-;栈空间
+;栈段
 stack segment
 	STACKSPACE db 1024 dup(0)
 stack ends
 	
-;数据空间
+;数据段
 data segment
-	;基础偏移
+	;基础偏移: 显示区域最左边
 	ZOFFSET db 24
+	
+	;两种0, 偷懒
 	Z0S1 db '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0   ',0
 	Z1S0 db ' 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  ',0
 	
 	;显示信息
-	;起始行,起始列,...  列未加基础偏移
+	;行,列,行,列,...  列未加基础偏移
+	;第一页
 	P1OFFSET db 2,1,4,18
 	P1L1 db 'THE BMS OF FIGHTERS ULTIMATE',0
 	P1L2 db 'Smith au Lait',0
-	
+	;第三页
 	P3OFFSET db 6,1,8,21
 	P3L3 db 'Music: Frums',0
 	P3L4 db 'BGA: Frums',0
-	
+	;第五页
 	P5OFFSET db 10,1,12,23
 	P5L5 db 'Genre: OTHER TIME',0
 	P5L6 db 'BPM: 179',0
-	
+	;第七页
 	P7OFFSET db 14,1
 	P7L7 db 'Credits',0
 	
-	;音符
+	;音符, 偷懒
 	;记录顺序从上到下, 列未加基础偏移
-	;I类
+	;第一个出现的音符的偏移
 	GROUP1OFFSET db 4,14,5,10,6,8,7,8,8,6,9,20,10,18,11,16,12,16,13,16
+	;第二个出现的音符的偏移
 	GROUP2OFFSET db 4,16,5,16,6,16,7,18,8,20,9,6,10,8,11,8,12,10,13,14
 	;单八分音符
 	HFNT2 db 0dh,0dh,0 
@@ -49,18 +50,23 @@ data segment
 	QTNT6 db 0eh,0eh,0eh,0eh,0eh,0eh,0
 	QTNT8 db 0eh,0eh,0eh,0eh,0eh,0eh,0eh,0eh,0
 	
-	;音符圆内图案
+	;音符圆内图案, 偷懒
+	;图案的偏移, 列未加基础偏移
 	SHAPEOFFSET db 7,14,8,12,9,12,10,14
+	; 'Ω'
 	OMEGA4 db 0eah,0eah,0eah,0eah,0
 	OMEGA8 db 0eah,0eah,0eah,0eah,0eah,0eah,0eah,0eah,0
+	; '.'
 	DOT4 db '....',0
 	DOT8 db '........',0
+	; '≈'
 	PEQU4 db 0f7h,0f7h,0f7h,0f7h,0
 	PEQU8 db 0f7h,0f7h,0f7h,0f7h,0f7h,0f7h,0f7h,0f7h,0
 data ends
 
+;程序段
 code segment
-;主函数
+;程序入口
 start:
 	;初始化栈
 	;在stack段, 长度1024
@@ -89,7 +95,7 @@ start:
 	call musicinfo
 	call delay1s
 	call fz_print_series
-p:
+	;第二段
 	call cls
 	mov ah,0
 	call drawcircle
@@ -124,6 +130,7 @@ drawshape:
 	push ax
 	push bx
 	push dx
+	push si
 	push bp
 
 	mov bp,sp
@@ -157,9 +164,9 @@ DRAWSHAPE_CONTINUE:
 	mov bx,offset ZOFFSET
 	mov ch,ds:[bx]
 	mov cl,00001111b
-	;音符1
 	mov bx,offset SHAPEOFFSET
 	mov si,ss:[bp-2]
+	;发现DRAWCIRCLE_SHOWBX可以复用
 	call DRAWCIRCLE_SHOWBX
 	add si,5
 	call DRAWCIRCLE_SHOWBX
@@ -170,6 +177,7 @@ DRAWSHAPE_CONTINUE:
 	;恢复栈
 	pop ax
 	
+	pop bp
 	pop si
 	pop dx
 	pop bx
