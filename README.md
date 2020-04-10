@@ -15,7 +15,7 @@
 
 ---
 
-credits.exe
+bga.exe
 
 16位可执行文件，可以扔到dos或者dosbox里跑
 
@@ -27,7 +27,7 @@ credits.exe
 
 ------
 
-credits.asm
+bga.asm
 
 唯一的一个源程序
 

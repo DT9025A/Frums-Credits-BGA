@@ -13,9 +13,11 @@ data segment
 	;基础偏移: 显示区域最左边
 	ZOFFSET db 24
 	
-	;两种0, 偷懒
+	;两种0, 偷懒不想用算法实现
 	Z0S1 db '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0   ',0
 	Z1S0 db ' 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  ',0
+	;每页0的停留时间
+	ZERODELAY dw 80
 	
 	;显示信息
 	;行,列,行,列,...  列未加基础偏移
@@ -34,14 +36,17 @@ data segment
 	;第七页
 	P7OFFSET db 14,1
 	P7L7 db 'Credits',0
+	;每页信息的停留时间
+	PAGEDELAY dw 2000
 	
-	;音符, 偷懒
-	;记录顺序从上到下, 列未加基础偏移
+	;音符记录顺序从上到下, 列未加基础偏移
 	;第一个出现的音符的偏移
 	GROUP1OFFSET db 4,14,5,10,6,8,7,8,8,6,9,20,10,18,11,16,12,16,13,16
 	;第二个出现的音符的偏移
+	;其实只是反序的关系
+	;但还是懒
 	GROUP2OFFSET db 4,16,5,16,6,16,7,18,8,20,9,6,10,8,11,8,12,10,13,14
-	;单八分音符
+	;单八分音符, 偷懒
 	HFNT2 db 0dh,0dh,0 
 	HFNT6 db 0dh,0dh,0dh,0dh,0dh,0dh,0
 	HFNT8 db 0dh,0dh,0dh,0dh,0dh,0dh,0dh,0dh,0
@@ -53,15 +58,33 @@ data segment
 	;音符圆内图案, 偷懒
 	;图案的偏移, 列未加基础偏移
 	SHAPEOFFSET db 7,14,8,12,9,12,10,14
-	; 'Ω'
+	; 'Ω' O
 	OMEGA4 db 0eah,0eah,0eah,0eah,0
 	OMEGA8 db 0eah,0eah,0eah,0eah,0eah,0eah,0eah,0eah,0
-	; '.'
+	; '.' D
 	DOT4 db '....',0
 	DOT8 db '........',0
-	; '≈'
+	; '≈' P
 	PEQU4 db 0f7h,0f7h,0f7h,0f7h,0
 	PEQU8 db 0f7h,0f7h,0f7h,0f7h,0f7h,0f7h,0f7h,0f7h,0
+	; '±' PM
+	PORM4 db 0f1h,0f1h,0f1h,0f1h,0
+	PORM8 db 0f1h,0f1h,0f1h,0f1h,0f1h,0f1h,0f1h,0f1h,0
+	;O,D,P停留时间
+	SHAPEDELAY_ODP dw 120
+	;PM停留时间
+	SHAPEDELAY_PM dw 40
+	
+	;括号偏移, 列未加基础偏移
+	BRACKETOFFSET db 4,4,4,26,5,3,5,27,6,3,6,27,7,2,7,28,8,2,8,28,9,2,9,28,10,2,10,28,11,3,11,27,12,3,12,27,13,4,13,26
+	;三级括号
+	BRACKET1 db 0b0h,0b0h,0
+	BRACKET2 db 0b1h,0b1h,0
+	BRACKET3 db 0b2h,0b2h,0
+	;三级括号在O,D切换时间
+	BRACKETDELAY_OD_3 dw 40
+	;二级括号在PORM切换时间
+	BRACKETDELAY_PM_2 dw 20
 data ends
 
 ;程序段
@@ -73,60 +96,127 @@ start:
 	mov ax,stack
 	mov ss,ax
 	mov sp,1024
-	;jmp p
-	;ah分段
+	;第一段
 	call cls
+	mov bx,offset PAGEDELAY
 	mov ah,0
-	call musicinfo
-	call delay1s
+	;显示文字
+	call music_info
+	call delay_offset
+	;画0
 	call fz_print_series
+	;下一页文字
 	inc ah
 	call cls
-	call musicinfo
-	call delay1s
+	;显示文字
+	call music_info
+	call delay_offset
+	;画0
 	call fz_print_series
+	;下一页文字
 	inc ah
 	call cls
-	call musicinfo
-	call delay1s
+	;显示文字
+	call music_info
+	call delay_offset
+	;画0
 	call fz_print_series
+	;下一页文字
 	inc ah
 	call cls
-	call musicinfo
-	call delay1s
+	;显示文字
+	call music_info
+	call delay_offset
+	;画0
 	call fz_print_series
 	;第二段
 	call cls
-	mov ah,0
-	call drawcircle
-	mov ah,0
-	call drawshape
-	call delay6ms
-	mov ah,1
-	call drawshape
-	call delay6ms
-	mov ah,2
-	call drawshape
-	call delay6ms
-	mov ah,0
-	call drawshape
-	call delay6ms
-	mov ah,1
-	call drawshape
-	call delay6ms
-	mov ah,2
-	call drawshape
-	call delay4ms
+	;动画
+	call shape_anim
+	call shape_anim
+	call shape_anim
+	call shape_anim
 	mov ax,4c00h
 	int 21h
-	
+
 ;-------------------;
-;子函数: drawshape  ;
+;子函数: shape_anim ;
+;那个圆里面的动画   ;
+;一遍               ;
+;-------------------;
+shape_anim proc
+	push ax
+	push bx
+	push cx
+	mov ah,0
+	;画圆
+	call draw_circle
+	call shape_anim_odp
+	call shape_anim_odp
+	mov bx,offset SHAPEDELAY_ODP
+	mov ah,0
+	call draw_shape
+	call delay_offset
+	mov ah,1
+	call draw_shape
+	call delay_offset
+	call shape_anim_odp
+	mov ah,1
+	call draw_circle
+	mov ah,0
+	call draw_shape
+	call delay_offset
+	mov ah,1
+	call draw_shape
+	call delay_offset
+	mov cx,7
+	mov bx,offset SHAPEDELAY_PM
+SHAPE_ANIM_PM_LOOP:
+	push cx
+	mov ah,3
+	call draw_shape
+	call delay_offset
+	mov ah,1
+	call draw_shape
+	call delay_offset
+	pop cx
+	loop SHAPE_ANIM_PM_LOOP
+	pop cx
+	pop bx
+	pop ax
+	ret
+shape_anim endp
+
+;----------------------;
+;子函数: shape_anim_odp;
+;omega dot pequal      ;
+;一遍                  ;
+;----------------------;
+shape_anim_odp proc
+	push ax
+	push bx
+	mov bx,offset SHAPEDELAY_ODP
+	mov ah,0
+	call draw_shape
+	call delay_offset
+	mov ah,1
+	call draw_shape
+	call delay_offset
+	mov ah,2
+	call draw_shape
+	call delay_offset
+	pop bx
+	pop ax
+	ret
+shape_anim_odp endp
+
+;-------------------;
+;子函数: draw_shape ;
 ;画那个圆里的图案   ;
 ;AH: 哪个图案       ;
-;0:O 1:D 2:P        ;
+;0:O 1:D 2:P 3:PM   ;
 ;-------------------;
-drawshape:
+draw_shape proc
 	push ax
 	push bx
 	push dx
@@ -145,6 +235,9 @@ drawshape:
 	test ah,ah
 	;2 PEQU
 	jz DRAWSHAPE_PEQU
+	mov ax,offset PORM4
+	push ax
+	jmp DRAWSHAPE_CONTINUE
 	
 DRAWSHAPE_OMEGA:
 	mov ax,offset OMEGA4
@@ -183,14 +276,15 @@ DRAWSHAPE_CONTINUE:
 	pop bx
 	pop ax
 	ret
-	
+draw_shape endp
+
 ;-------------------;
-;子函数: drawcircle ;
+;子函数: draw_circle;
 ;画那个圆           ;
 ;AH: 哪个音符在前   ;
 ;0:单八分音符在前/HF;
 ;-------------------;
-drawcircle:
+draw_circle proc
 	push ax
 	push bx
 	push dx
@@ -225,6 +319,13 @@ DRAWCIRCLE_CONTINUE:
 	add dl,ch
 	mov si,offset P7L7
 	call show_str
+	;Frums
+	mov dl,26
+	mov dh,15
+	add dl,ch
+	mov si,offset P3L4
+	add si,5
+	call show_str
 	;音符1
 	mov bx,offset GROUP1OFFSET
 	mov si,ss:[bp-2]
@@ -241,6 +342,8 @@ DRAWCIRCLE_CONTINUE:
 	pop bx
 	pop ax
 	ret
+draw_circle endp
+
 DRAWCIRCLE_SHOWBP:
 ;函数内子函数
 ;显示BP相关数据
@@ -280,13 +383,14 @@ DRAWCIRCLE_SHOWBX:
 	call show_str
 	add bx,2
 	ret
-	
+
+
 ;------------------;
-;子函数: musicinfo ;
+;子函数: music_info;
 ;输出开头段音乐信息;
 ;AH: 分段(从0)     ;
 ;------------------;
-musicinfo:
+music_info proc
 	push ax	;传参, 传基址
 	push bx	;变址
 	push cx	;偏移, 颜色
@@ -367,12 +471,14 @@ MUSICINFO_SEG1:
 	pop bx
 	pop ax
 	ret
+music_info endp
+
 
 ;--------------;
 ;子函数: cls   ;
 ;清屏          ;
 ;--------------;
-cls:
+cls proc
 	push bx
 	push cx
 	push dx
@@ -392,77 +498,33 @@ CLS_LOOP:
 	pop cx
 	pop bx
 	ret
-
+cls endp
 
 ;------------------------;
-;子函数: delay4ms        ;
-;延时4ms 用于圆内图案切换;
+;子函数: delay_offset    ;
+;延迟偏移地址在BX中的时间;
+;BX:16位延迟时间偏移地址 ;
 ;------------------------;
-delay4ms:
+delay_offset proc
 	push ax
+	push bx
 	push cx
 	push dx
+	mov ax,data
+	mov ds,ax
+	mov ax,ds:[bx]
+	mov cx,1000
+	mul cx
+	mov cx,dx
+	mov dx,ax
 	mov ax,8600h
-	mov cx,1
-	mov dx,3880h
 	int 15h
 	pop dx
 	pop cx
+	pop bx
 	pop ax
 	ret
-
-;------------------------;
-;子函数: delay6ms        ;
-;延时6ms 用于圆内图案切换;
-;------------------------;
-delay6ms:
-	push ax
-	push cx
-	push dx
-	mov ax,8600h
-	mov cx,1
-	mov dx,0d4c0h
-	int 15h
-	pop dx
-	pop cx
-	pop ax
-	ret
-
-;---------------------;
-;子函数: delay125ms   ;
-;延时125ms 用于0页切换;
-;---------------------;
-delay125ms:
-	push ax
-	push cx
-	push dx
-	mov ax,8600h
-	mov cx,3h
-	mov dx,0d090h
-	int 15h
-	pop dx
-	pop cx
-	pop ax
-	ret
-
-
-;-------------------;
-;子函数: delay1s    ;
-;延时1s 用于幕间变换;
-;-------------------;
-delay1s:
-	push ax
-	push cx
-	push dx
-	mov ax,8600h
-	mov cx,1eh
-	mov dx,8480h
-	int 15h
-	pop dx
-	pop cx
-	pop ax
-	ret
-
+delay_offset endp
 
 ;---------------------------;
 ;子函数: fz_print_1_line    ;
@@ -470,7 +532,7 @@ delay1s:
 ;CL: 循环变量,决定位置和属性;
 ;CH: 决定第一行0的属性      ;
 ;---------------------------;
-fz_print_1_line:
+fz_print_1_line proc
 	push ax
 	push bx
 	push cx
@@ -501,14 +563,15 @@ FZ_PRINT:
 	pop bx
 	pop ax
 	ret
-	
+fz_print_1_line endp
 	
 ;-----------------------;
 ;子函数: fz_print_series;
 ;显示8张0               ;
 ;-----------------------;
-fz_print_series:
+fz_print_series proc
 	push ax
+	push bx
 	push cx
 	mov cx,8
 FZ_PR_LOOP:
@@ -527,13 +590,16 @@ FZ_PR_1L:
 	dec cx
 	jmp short FZ_PR_1L
 FZ_PR_O:
-	call delay125ms
+	mov bx,offset ZERODELAY
+	call delay_offset
+	;call delay125ms
 	pop cx
 	loop FZ_PR_LOOP
 	pop cx
+	pop bx
 	pop ax
 	ret
-
+fz_print_series endp
 
 ;-------------------;
 ;子函数: show_str   ;
@@ -543,7 +609,7 @@ FZ_PR_O:
 ;CL: 颜色           ;
 ;DS:SI 字符串地址   ;
 ;-------------------;
-show_str:
+show_str proc
 	;保存用到的寄存器值
 	push ax
 	push bx
@@ -587,6 +653,8 @@ SHOW_STR_OUT:
 	pop bx
 	pop ax
 	ret
+show_str endp
 
 code ends
 end start
+
